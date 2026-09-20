@@ -22,3 +22,8 @@ Clone the repository and open `index.html` in a browser. Keep `rush-levels.js` b
 ## Play online
 
 https://lironle6.github.io/traffic-jam/
+
+## Development docs
+
+- [Game overview](docs/game.md)
+- [Level generation](docs/generate-levels.md)
