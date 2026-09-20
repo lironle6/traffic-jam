@@ -13,7 +13,7 @@ This is a deliberately small, self-contained web game:
 - `rush-levels.js` contains the pre-generated puzzle catalog.
 - The game needs no framework, build step, server, dependencies, or network access. Open `index.html` locally or host the two files on any static site host.
 
-The included solver uses breadth-first search to find an exact minimum-move solution for each layout. A separate Python generator produced the level catalog, which is grouped by solution length.
+`rush_solve.py` uses breadth-first search to find an exact minimum-move solution for each layout. It can also generate solvable random layouts; its output produced the catalog, which is grouped by solution length.
 
 ## Run locally
 
