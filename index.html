@@ -1,0 +1,403 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Traffic Jam</title>
+  <style>
+    :root { color-scheme: dark; font-family: system-ui, sans-serif; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #15211f; color: #f9f4e8; }
+    main { width: min(96vw, 860px); padding: 28px 0; }
+    h1 { margin: 0; font-size: clamp(2rem, 8vw, 3.5rem); letter-spacing: -.06em; }
+    .sub { margin: 4px 0 22px; color: #bdc9c2; }
+    #board-stage { position: relative; width: min(96vw, 820px); }
+    #board { position: relative; width: 100%; aspect-ratio: 1; border: 12px solid #293a36; border-radius: 20px; background-color: #d7d0c1; background-image: linear-gradient(#aaa193 1px, transparent 1px), linear-gradient(90deg, #aaa193 1px, transparent 1px); background-size: calc(100% / 6) calc(100% / 6); box-shadow: 0 18px 35px #0007; overflow: hidden; }
+    .exit { position: absolute; right: -2px; top: 33.333%; z-index: 4; height: 16.667%; width: 54px; display: grid; place-content: center; background: #f2bc3d; color: #15211f; font-size: .65rem; font-weight: 900; line-height: 1; text-align: center; pointer-events: none; clip-path: polygon(0 18%, 67% 18%, 67% 0, 100% 50%, 67% 100%, 67% 82%, 0 82%); }
+    .vehicle { --drag-x: 0px; --drag-y: 0px; position: absolute; padding: 0; border: 0; background: transparent; cursor: grab; touch-action: none; user-select: none; transform: translate(var(--drag-x), var(--drag-y)); transition: left .13s ease, top .13s ease, transform .08s ease, filter .12s ease, opacity .2s; }
+    .vehicle-art { position: absolute; display: block; overflow: visible; pointer-events: none; filter: drop-shadow(0 5px 3px #0006); }
+    .vehicle.horizontal .vehicle-art { inset: 2%; width: 96%; height: 96%; }
+    .vehicle.vertical.car .vehicle-art { left: -48%; top: 26%; width: 196%; height: 48%; transform: rotate(90deg); }
+    .vehicle.vertical.truck .vehicle-art { left: -98%; top: 34%; width: 296%; height: 32%; transform: rotate(90deg); }
+    .vehicle-art .wheel { fill: #18201f; stroke: #070a09; stroke-width: 2; }
+    .vehicle-art .body { fill: var(--car-color); stroke: color-mix(in srgb, var(--car-color), black 32%); stroke-width: 4; }
+    .vehicle-art .body-highlight { fill: none; stroke: #ffffff70; stroke-width: 4; stroke-linecap: round; }
+    .vehicle-art .roof { fill: color-mix(in srgb, var(--car-color), white 15%); stroke: color-mix(in srgb, var(--car-color), black 23%); stroke-width: 3; }
+    .vehicle-art .glass { fill: color-mix(in srgb, var(--car-color), #bfe8ef 48%); stroke: color-mix(in srgb, var(--car-color), black 30%); stroke-width: 2; }
+    .vehicle-art .panel { fill: none; stroke: color-mix(in srgb, var(--car-color), black 24%); stroke-width: 3; stroke-linecap: round; }
+    .vehicle-art .ridge { stroke: #ffffff48; stroke-width: 4; stroke-linecap: round; }
+    .vehicle-art .headlight { fill: #fff0a8; stroke: #9c7622; stroke-width: 1.5; }
+    .vehicle-art .taillight { fill: #8e2020; }
+    .vehicle-art .ice-cream-box { fill: #fff1d2; stroke: #b8413c; stroke-width: 3; }
+    .vehicle-art .ice-cream-window { fill: #a9dce4; stroke: #386f78; stroke-width: 2; }
+    .vehicle-art .ice-cream-awning { fill: #f7dfbd; stroke: #b8413c; stroke-width: 2; }
+    .vehicle-art .ice-cream-stripe { fill: #d9463e; }
+    .vehicle-art .ice-cream-cone { fill: #d89b4a; stroke: #875420; stroke-width: 1.5; }
+    .vehicle-art .ice-cream-scoop { fill: #f7c4d7; stroke: #a94d72; stroke-width: 1.5; }
+    .vehicle-art .ice-cream-label { fill: #a92626; font: 700 10px system-ui, sans-serif; letter-spacing: .8px; }
+    .vehicle.selected { z-index: 3; transform: translate(var(--drag-x), var(--drag-y)) translateY(-3px) scale(1.035); filter: brightness(1.12) drop-shadow(0 0 5px #fff); }
+    .vehicle:active { cursor: grabbing; }
+    @media (hover: hover) { .vehicle:hover { filter: brightness(1.07); } }
+    .vehicle.horizontal.hinting { animation: hint-x .7s ease-in-out 3; }
+    .vehicle.vertical.hinting { animation: hint-y .7s ease-in-out 3; }
+    .vehicle.escaping { pointer-events: none; animation: escape .8s ease-in forwards; }
+    .wall { position: absolute; z-index: 2; border: 5px solid #4b514f; border-radius: 10px; background: repeating-linear-gradient(135deg, #6d7471 0 10px, #555c59 10px 20px); box-shadow: inset 0 2px #ffffff33, 0 3px 3px #0005; }
+    @keyframes escape { to { transform: translateX(145%); opacity: 0; } }
+    @keyframes hint-x { 35% { transform: translateX(7px); } 70% { transform: translateX(-7px); } }
+    @keyframes hint-y { 35% { transform: translateY(7px); } 70% { transform: translateY(-7px); } }
+    .controls { display: flex; gap: 10px; margin-top: 18px; flex-wrap: wrap; }
+    button.control { border: 0; border-radius: 10px; padding: 11px 15px; background: #ecb348; color: #20221e; font: inherit; font-weight: 750; cursor: pointer; }
+    button.control.secondary { background: #365049; color: #f9f4e8; }
+    .level-picker { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 10px; background: #365049; color: #f9f4e8; font-weight: 750; }
+    #level-selector { border: 0; border-radius: 6px; padding: 3px 7px; background: #f9f4e8; color: #20221e; font: inherit; font-weight: 750; }
+    #message { min-height: 1.5em; margin: 15px 0 0; color: #d4e5da; }
+    kbd { border: 1px solid #6a7a73; border-radius: 4px; padding: 1px 5px; font-size: .8em; }
+    .directions { margin: 18px 0 0; color: #bdc9c2; font-size: .92rem; }
+    #move-count { margin: 0 0 10px; color: #d4e5da; font-size: .95rem; }
+    #complete { position: absolute; inset: 12px; z-index: 7; display: grid; place-items: center; padding: 25px; border-radius: 10px; background: #13221ddd; text-align: center; opacity: 0; pointer-events: none; transition: opacity .2s ease; }
+    #complete.visible { opacity: 1; pointer-events: auto; }
+    #complete h2 { margin: 0; font-size: clamp(2rem, 8vw, 3.4rem); letter-spacing: -.06em; }
+    #complete p { margin: 7px 0 20px; color: #d4e5da; }
+    .completion-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Traffic Jam</h1>
+    <p class="sub" id="level-title">Level 1 · Free the <strong>red ice-cream truck</strong> through the yellow EXIT arrow.</p>
+    <p id="move-count">Moves: 0</p>
+    <div id="board-stage">
+      <div id="board" aria-label="Six by six puzzle board"></div>
+      <div class="exit" aria-hidden="true">EXIT<br>→</div>
+      <section id="complete" aria-live="polite" aria-label="Level complete">
+        <div>
+          <h2 id="completion-title">You escaped!</h2>
+          <p id="completion-moves"></p>
+          <div class="completion-actions">
+            <button class="control secondary" id="replay">Reset level</button>
+            <button class="control" id="continue">Continue</button>
+          </div>
+        </div>
+      </section>
+    </div>
+    <div class="controls">
+      <label class="level-picker">Level <select id="level-selector" aria-label="Choose level"></select></label>
+      <button class="control secondary" id="random">Another random level</button>
+      <button class="control" id="hint">Use hint (1)</button>
+      <button class="control secondary" id="reset">Reset level</button>
+    </div>
+    <p id="message" aria-live="polite">Drag a vehicle along its lane, or select it and use the arrow keys.</p>
+    <p class="directions">Vehicles move only in their own direction. Drag them freely along their lane, or use <kbd>←</kbd> <kbd>→</kbd> <kbd>↑</kbd> <kbd>↓</kbd>.</p>
+  </main>
+  <script src="rush-levels.js"></script>
+  <script>
+    const palette = [
+      ['blue', '#2876ad'], ['gold', '#eca93a'], ['green', '#4e9e72'], ['purple', '#8267b5'],
+      ['orange', '#d86e32'], ['teal', '#278f8a'], ['pink', '#c95d82'], ['olive', '#7b8d38'],
+      ['indigo', '#536fb4'], ['brown', '#9a6547'], ['cyan', '#3299b5'], ['lime', '#73a943']
+    ];
+
+    function vehicleArtwork(car) {
+      if (car.id === 'red') return `
+        <svg class="vehicle-art" viewBox="0 0 200 100" aria-hidden="true" focusable="false">
+          <rect class="wheel" x="27" y="0" width="36" height="15" rx="6"/><rect class="wheel" x="27" y="85" width="36" height="15" rx="6"/>
+          <rect class="wheel" x="139" y="0" width="34" height="15" rx="6"/><rect class="wheel" x="139" y="85" width="34" height="15" rx="6"/>
+          <path class="body" d="M19 7H169Q181 7 186 18L196 31V70L187 83Q182 94 170 94H19Q9 94 6 83L3 69V30L7 18Q10 7 19 7Z"/>
+          <path class="body-highlight" d="M21 13H166Q176 13 180 21"/>
+          <rect class="ice-cream-box" x="15" y="15" width="119" height="70" rx="9"/>
+          <rect class="ice-cream-window" x="28" y="28" width="78" height="38" rx="5"/>
+          <path class="ice-cream-awning" d="M23 22H113V31H23Z"/>
+          <path class="ice-cream-stripe" d="M28 22H38V31H28ZM48 22H58V31H48ZM68 22H78V31H68ZM88 22H98V31H88Z"/>
+          <text class="ice-cream-label" x="39" y="79">ICE CREAM</text>
+          <path class="ice-cream-cone" d="M112 47L124 47L118 64Z"/>
+          <circle class="ice-cream-scoop" cx="118" cy="42" r="8"/>
+          <path class="roof" d="M137 20H169Q179 20 184 31L190 49L184 69Q179 80 169 80H137L130 68V32Z"/>
+          <path class="glass" d="M164 25H170Q176 25 180 35L185 47H164Z"/>
+          <path class="glass" d="M164 53H185L180 65Q176 75 170 75H164Z"/>
+          <path class="glass" d="M138 27L132 36V64L138 73H150V27Z"/>
+          <path class="panel" d="M155 23V77M191 37V64"/>
+          <rect class="headlight" x="189" y="23" width="6" height="15" rx="3"/><rect class="headlight" x="189" y="62" width="6" height="15" rx="3"/>
+          <rect class="taillight" x="5" y="22" width="6" height="16" rx="2"/><rect class="taillight" x="5" y="62" width="6" height="16" rx="2"/>
+        </svg>`;
+      if (car.size === 3) return `
+        <svg class="vehicle-art" viewBox="0 0 300 100" aria-hidden="true" focusable="false">
+          <rect class="wheel" x="28" y="0" width="38" height="15" rx="6"/><rect class="wheel" x="28" y="85" width="38" height="15" rx="6"/>
+          <rect class="wheel" x="145" y="0" width="38" height="15" rx="6"/><rect class="wheel" x="145" y="85" width="38" height="15" rx="6"/>
+          <rect class="wheel" x="237" y="0" width="38" height="15" rx="6"/><rect class="wheel" x="237" y="85" width="38" height="15" rx="6"/>
+          <path class="body" d="M20 7H271Q281 7 285 17L296 29V71L285 83Q281 93 271 93H20Q10 93 7 82L3 69V31L7 18Q10 7 20 7Z"/>
+          <path class="body-highlight" d="M22 13H268Q277 13 280 21"/>
+          <rect class="roof" x="17" y="16" width="190" height="68" rx="9"/>
+          <path class="panel" d="M48 18V82M79 18V82M110 18V82M141 18V82M172 18V82"/>
+          <path class="ridge" d="M24 24H199M24 76H199"/>
+          <path class="roof" d="M213 19H266Q278 19 283 31L288 50L283 69Q278 81 266 81H213L205 69V31Z"/>
+          <path class="glass" d="M254 24H266Q274 24 278 34L282 48H254Z"/>
+          <path class="glass" d="M254 52H282L278 66Q274 76 266 76H254Z"/>
+          <path class="glass" d="M214 27L207 36V64L214 73H228V27Z"/>
+          <path class="panel" d="M235 23V77M289 35V65"/>
+          <rect class="headlight" x="289" y="23" width="6" height="15" rx="3"/><rect class="headlight" x="289" y="62" width="6" height="15" rx="3"/>
+          <rect class="taillight" x="5" y="22" width="6" height="16" rx="2"/><rect class="taillight" x="5" y="62" width="6" height="16" rx="2"/>
+        </svg>`;
+      return `
+        <svg class="vehicle-art" viewBox="0 0 200 100" aria-hidden="true" focusable="false">
+          <rect class="wheel" x="27" y="0" width="36" height="15" rx="6"/><rect class="wheel" x="27" y="85" width="36" height="15" rx="6"/>
+          <rect class="wheel" x="137" y="0" width="36" height="15" rx="6"/><rect class="wheel" x="137" y="85" width="36" height="15" rx="6"/>
+          <path class="body" d="M25 6H174Q183 6 187 16L196 28V72L187 84Q183 94 174 94H25Q16 94 12 84L4 72V28L12 16Q16 6 25 6Z"/>
+          <path class="body-highlight" d="M27 12H171Q179 12 182 20"/>
+          <path class="roof" d="M62 19Q68 13 79 13H124Q135 13 141 23L150 50L141 77Q135 87 124 87H79Q68 87 62 79L51 50Z"/>
+          <path class="glass" d="M59 50L70 25Q73 20 80 20H89V80H80Q73 80 70 75Z"/>
+          <path class="glass" d="M141 50L132 25Q129 20 123 20H112V80H123Q129 80 132 75Z"/>
+          <path class="panel" d="M94 18V82M155 24H180M155 76H180M19 25H45M19 75H45"/>
+          <path class="ridge" d="M22 15H49M22 85H49"/>
+          <rect class="headlight" x="187" y="22" width="7" height="16" rx="3"/><rect class="headlight" x="187" y="62" width="7" height="16" rx="3"/>
+          <rect class="taillight" x="7" y="22" width="6" height="16" rx="2"/><rect class="taillight" x="7" y="62" width="6" height="16" rx="2"/>
+        </svg>`;
+    }
+
+    function parseLayout(layout) {
+      if (layout.length !== 36) throw new Error(`Invalid level layout length: ${layout.length}`);
+      const groups = new Map();
+      for (let index = 0; index < layout.length; index++) {
+        const symbol = layout[index];
+        if (symbol === 'o' || symbol === '.') continue;
+        if (symbol === 'x') {
+          groups.set(`wall-${index}`, [{ x: index % 6, y: Math.floor(index / 6), fixed: true }]);
+          continue;
+        }
+        if (!groups.has(symbol)) groups.set(symbol, []);
+        groups.get(symbol).push({ x: index % 6, y: Math.floor(index / 6) });
+      }
+      let colorIndex = 0;
+      return [...groups].map(([symbol, positions]) => {
+        if (positions[0].fixed) return { id: symbol, name: 'wall', x: positions[0].x, y: positions[0].y, size: 1, direction: 'fixed', fixed: true };
+        const horizontal = positions.every(position => position.y === positions[0].y);
+        const vertical = positions.every(position => position.x === positions[0].x);
+        if ((!horizontal && !vertical) || ![2, 3].includes(positions.length)) throw new Error(`Invalid vehicle ${symbol}`);
+        const [colorName, color] = symbol === 'A' ? ['red', '#de4a3d'] : palette[colorIndex++ % palette.length];
+        return {
+          id: symbol === 'A' ? 'red' : symbol,
+          name: symbol === 'A' ? 'red ice-cream truck' : `${colorName} ${positions.length === 3 ? 'truck' : 'car'}`,
+          x: Math.min(...positions.map(position => position.x)),
+          y: Math.min(...positions.map(position => position.y)),
+          size: positions.length,
+          direction: horizontal ? 'horizontal' : 'vertical',
+          color
+        };
+      });
+    }
+
+    const availableDifficulties = Object.keys(window.RUSH_LEVELS).map(Number).sort((a, b) => a - b);
+    let levelNumber = 1, level, currentLayout, cars = [], selected = null, hintUsed = false, solved = false, moves = 0, drag = null, hintCar = null, hintTimer, keyboardRun = null;
+    const board = document.querySelector('#board'), message = document.querySelector('#message'), hint = document.querySelector('#hint');
+    const moveCount = document.querySelector('#move-count'), complete = document.querySelector('#complete');
+    const levelTitle = document.querySelector('#level-title'), continueButton = document.querySelector('#continue');
+    const replayButton = document.querySelector('#replay'), completionTitle = document.querySelector('#completion-title');
+    const levelSelector = document.querySelector('#level-selector'), randomButton = document.querySelector('#random');
+
+    for (const difficulty of availableDifficulties) levelSelector.append(new Option(difficulty, difficulty));
+
+    function updateLevelTitle() {
+      const position = availableDifficulties.indexOf(levelNumber) + 1;
+      levelTitle.innerHTML = `Level ${position} of ${availableDifficulties.length} · Minimum ${level.minimumMoves} moves. Free the <strong>red ice-cream truck</strong> through the yellow EXIT arrow.`;
+    }
+
+    function pickLayout(number, avoid) {
+      const choices = window.RUSH_LEVELS[number];
+      if (!choices?.length) throw new Error(`No layouts available for level ${number}`);
+      const alternatives = choices.length > 1 ? choices.filter(layout => layout !== avoid) : choices;
+      return alternatives[Math.floor(Math.random() * alternatives.length)];
+    }
+
+    function loadLevel(number, another = false) {
+      levelNumber = number;
+      levelSelector.value = number;
+      const layout = pickLayout(number, another ? currentLayout : null);
+      currentLayout = layout;
+      level = { minimumMoves: number, layout, cars: parseLayout(layout) };
+      reset();
+    }
+
+    function draw() {
+      board.replaceChildren();
+      for (const car of cars) {
+        const element = document.createElement(car.fixed ? 'div' : 'button');
+        const horizontal = car.direction === 'horizontal';
+        element.className = car.fixed ? 'wall' : `vehicle ${car.direction} ${car.size === 3 ? 'truck' : 'car'} ${selected === car.id ? 'selected' : ''}`;
+        if (hintCar === car.id) element.classList.add('hinting');
+        element.style.left = `${car.x * 100 / 6}%`;
+        element.style.top = `${car.y * 100 / 6}%`;
+        element.style.width = `${(horizontal ? car.size : 1) * 100 / 6}%`;
+        element.style.height = `${(horizontal ? 1 : car.size) * 100 / 6}%`;
+        if (!car.fixed) element.style.setProperty('--car-color', car.color);
+        element.dataset.carId = car.id;
+        if (car.fixed) { element.setAttribute('aria-hidden', 'true'); board.append(element); continue; }
+        element.setAttribute('aria-label', `Select ${car.name}`);
+        element.innerHTML = vehicleArtwork(car);
+        if (car.id === 'red' && solved) element.classList.add('escaping');
+        element.onpointerdown = event => {
+          if (solved) return;
+          event.preventDefault();
+          element.setPointerCapture(event.pointerId);
+          selected = car.id;
+          keyboardRun = null;
+          drag = { id: car.id, startX: event.clientX, startY: event.clientY, pointerId: event.pointerId, element };
+          board.querySelectorAll('.vehicle').forEach(vehicle => vehicle.classList.toggle('selected', vehicle.dataset.carId === car.id));
+          message.textContent = `Drag the ${car.name} along its lane.`;
+        };
+        element.onfocus = () => {
+          if (selected !== car.id) keyboardRun = null;
+          selected = car.id;
+          board.querySelectorAll('.vehicle').forEach(vehicle => vehicle.classList.toggle('selected', vehicle.dataset.carId === car.id));
+        };
+        board.append(element);
+      }
+    }
+    function cells(car) {
+      return Array.from({ length: car.size }, (_, i) => [car.x + (car.direction === 'horizontal' ? i : 0), car.y + (car.direction === 'vertical' ? i : 0)]);
+    }
+    function maxDistanceIn(state, car, step) {
+      if (!step.x && !step.y) return 0;
+      const occupied = new Set(state.filter(other => other.id !== car.id).flatMap(cells).map(cell => cell.join(',')));
+      let distance = 0, next = { ...car };
+      while (true) {
+        next = { ...next, x: next.x + step.x, y: next.y + step.y };
+        if (cells(next).some(([x, y]) => x < 0 || x > 5 || y < 0 || y > 5 || occupied.has(`${x},${y}`))) return distance;
+        distance++;
+      }
+    }
+    function move(id, delta, countMove = true, restoreFocus = false) {
+      if (solved) return false;
+      const car = cars.find(car => car.id === id);
+      if ((car.direction === 'horizontal' && delta.y) || (car.direction === 'vertical' && delta.x)) { message.textContent = 'That vehicle cannot move sideways.'; return false; }
+      const distance = Math.max(Math.abs(delta.x), Math.abs(delta.y));
+      if (!distance) return false;
+      const step = { x: Math.sign(delta.x), y: Math.sign(delta.y) };
+      let moved = false;
+      for (let i = 0; i < distance; i++) {
+        const next = { ...car, x: car.x + step.x, y: car.y + step.y };
+        const occupied = new Set(cars.filter(other => other.id !== car.id).flatMap(cells).map(cell => cell.join(',')));
+        if (cells(next).some(([x, y]) => x < 0 || x > 5 || y < 0 || y > 5 || occupied.has(`${x},${y}`))) break;
+        Object.assign(car, next); moved = true;
+      }
+      if (!moved) { message.textContent = 'That way is blocked.'; return false; }
+      if (countMove) moves++;
+      moveCount.textContent = `Moves: ${moves}`; draw();
+      if (restoreFocus) board.querySelector(`[data-car-id="${id}"]`).focus({ preventScroll: true });
+      if (car.id === 'red' && car.x === 4) escape();
+      return true;
+    }
+    function escape() {
+      solved = true;
+      message.textContent = 'The ice-cream truck is breaking out!';
+      draw();
+      window.setTimeout(() => {
+        const finalLevel = levelNumber === availableDifficulties[availableDifficulties.length - 1];
+        completionTitle.textContent = finalLevel ? 'Final level complete!' : 'You escaped!';
+        document.querySelector('#completion-moves').textContent = finalLevel
+          ? `You finished the last level in ${moves} moves. Minimum: ${level.minimumMoves} moves.`
+          : `You escaped in ${moves} moves. Minimum: ${level.minimumMoves} moves.`;
+        replayButton.hidden = finalLevel;
+        continueButton.hidden = finalLevel;
+        complete.classList.add('visible');
+      }, 780);
+    }
+    document.addEventListener('keydown', event => {
+      const directions = { ArrowLeft: {x:-1,y:0}, ArrowRight: {x:1,y:0}, ArrowUp: {x:0,y:-1}, ArrowDown: {x:0,y:1} };
+      if (directions[event.key] && selected && !event.target.classList.contains('control')) {
+        event.preventDefault();
+        const moved = move(selected, directions[event.key], keyboardRun !== selected, true);
+        if (moved) keyboardRun = selected;
+      }
+    });
+    document.addEventListener('pointerup', event => {
+      if (!drag || solved) return;
+      const car = cars.find(car => car.id === drag.id), rect = board.getBoundingClientRect();
+      const dx = Math.round((event.clientX - drag.startX) / (rect.width / 6));
+      const dy = Math.round((event.clientY - drag.startY) / (rect.height / 6));
+      if (drag.element.hasPointerCapture(drag.pointerId)) drag.element.releasePointerCapture(drag.pointerId);
+      drag = null; keyboardRun = null;
+      if (!dx && !dy) { message.textContent = `${car.name[0].toUpperCase() + car.name.slice(1)} selected.`; return; }
+      move(car.id, car.direction === 'horizontal' ? { x: dx, y: 0 } : { x: 0, y: dy });
+    });
+    document.addEventListener('pointermove', event => {
+      if (!drag || solved) return;
+      const car = cars.find(car => car.id === drag.id), rect = board.getBoundingClientRect();
+      const horizontal = car.direction === 'horizontal';
+      const raw = horizontal ? event.clientX - drag.startX : event.clientY - drag.startY;
+      const cellSize = horizontal ? rect.width / 6 : rect.height / 6;
+      const sign = Math.sign(raw);
+      const limit = maxDistanceIn(cars, car, horizontal ? { x: sign, y: 0 } : { x: 0, y: sign }) * cellSize;
+      const offset = sign * Math.min(Math.abs(raw), limit);
+      const element = board.querySelector(`[data-car-id="${car.id}"]`);
+      element.style.setProperty(horizontal ? '--drag-x' : '--drag-y', `${offset}px`);
+    });
+    document.addEventListener('pointercancel', () => {
+      if (!drag) return;
+      drag = null; keyboardRun = null;
+      message.textContent = 'Drag cancelled.';
+      draw();
+    });
+
+    function legalMoves(state) {
+      const result = [];
+      for (const car of state) {
+        if (car.fixed) continue;
+        for (const step of [{ x: -1, y: 0 }, { x: 1, y: 0 }, { x: 0, y: -1 }, { x: 0, y: 1 }]) {
+          if ((car.direction === 'horizontal' && step.y) || (car.direction === 'vertical' && step.x)) continue;
+          const limit = maxDistanceIn(state, car, step);
+          for (let distance = 1; distance <= limit; distance++) {
+            const next = structuredClone(state);
+            const movedCar = next.find(candidate => candidate.id === car.id);
+            movedCar.x += step.x * distance;
+            movedCar.y += step.y * distance;
+            result.push({ state: next, move: { id: car.id, delta: { x: step.x * distance, y: step.y * distance } } });
+          }
+        }
+      }
+      return result;
+    }
+
+    function shortestSolution(start) {
+      const key = state => state.map(car => `${car.id}:${car.x},${car.y}`).join('|');
+      const queue = [{ state: structuredClone(start), path: [] }], seen = new Set([key(start)]);
+      for (let cursor = 0; cursor < queue.length; cursor++) {
+        const current = queue[cursor];
+        if (current.state.find(car => car.id === 'red').x === 4) return current.path;
+        for (const candidate of legalMoves(current.state)) {
+          const candidateKey = key(candidate.state);
+          if (seen.has(candidateKey)) continue;
+          seen.add(candidateKey);
+          queue.push({ state: candidate.state, path: [...current.path, candidate.move] });
+        }
+      }
+      return null;
+    }
+
+    function describeMove(car, delta) {
+      const distance = Math.max(Math.abs(delta.x), Math.abs(delta.y));
+      const direction = delta.x < 0 ? 'left' : delta.x > 0 ? 'right' : delta.y < 0 ? 'up' : 'down';
+      return `Hint: move the ${car.name} ${direction} ${distance} ${distance === 1 ? 'space' : 'spaces'}.`;
+    }
+
+    hint.onclick = () => {
+      if (hintUsed) return;
+      const solution = shortestSolution(cars);
+      if (!solution?.length) { message.textContent = 'No hint is available from this position.'; return; }
+      hintUsed = true; hint.disabled = true; hint.textContent = 'Hint used';
+      hintCar = solution[0].id;
+      message.textContent = describeMove(cars.find(car => car.id === hintCar), solution[0].delta);
+      draw();
+      hintTimer = window.setTimeout(() => { hintCar = null; draw(); }, 2700);
+    };
+    function reset() { window.clearTimeout(hintTimer); cars = structuredClone(level.cars); selected = null; hintCar = null; hintUsed = false; solved = false; moves = 0; drag = null; keyboardRun = null; hint.disabled = false; hint.textContent = 'Use hint (1)'; replayButton.hidden = false; continueButton.hidden = false; complete.classList.remove('visible'); moveCount.textContent = 'Moves: 0'; updateLevelTitle(); message.textContent = 'Drag a vehicle along its lane, or select it and use the arrow keys.'; draw(); }
+    document.querySelector('#reset').onclick = reset;
+    document.querySelector('#replay').onclick = reset;
+    document.querySelector('#continue').onclick = () => {
+      const next = availableDifficulties.indexOf(levelNumber) + 1;
+      if (next < availableDifficulties.length) loadLevel(availableDifficulties[next]);
+    };
+    levelSelector.onchange = () => loadLevel(Number(levelSelector.value));
+    randomButton.onclick = () => loadLevel(levelNumber, true);
+    loadLevel(1);
+  </script>
+</body>
+</html>
